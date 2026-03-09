@@ -38,25 +38,37 @@ int main(int argc, char* argv[]) {
     exit(1);
   }
   else if(pid == 0) {
-    close(pipefd[1]);
+    if(close(pipefd[1]) < 0) {
+      perror("child close(pipefd[1]) fail");
+      exit(1);
+    }
+
     char in_buf[16384];
     ssize_t r;
     while ((r = read(pipefd[0], in_buf, buf_size)) > 0) {
       if (write_pipe(1, in_buf, r) < 0) {
         perror("write stdout fail");
-        _exit(1);
+        exit(1);
       }
     }
     if (r < 0) {
       perror("read fail");
-      _exit(1);
+      exit(1);
     }
 
-    close(pipefd[0]);
-    _exit(0);
+    if(close(pipefd[0]) < 0) {
+      perror("child close(pipefd[0]) fail");
+      exit(1);
+    }
+    exit(0);
   }
 
-  close(pipefd[0]);
+  if(close(pipefd[0]) < 0) {
+    perror("parent close(pipefd[0]) fail");
+    close(pipefd[1]);
+    wait(0);
+    exit(1);
+  }
   
   char out_buf[16384];
   int k = 0;
@@ -80,7 +92,7 @@ int main(int argc, char* argv[]) {
       int tail = len - idx;
       int take = tail < free_space ? tail : free_space;
 
-      memmove(out_buf + k, argv[i] + idx, take);
+      memcpy(out_buf + k, argv[i] + idx, take);
       k += take;
       idx += take;
     }
@@ -106,7 +118,11 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  close(pipefd[1]);
+  if(close(pipefd[1]) < 0) {
+    perror("parent close(pipefd[1]) fail");
+    wait(0);
+    exit(1);
+  }
   int status;
   waitpid(pid, &status, 0);
   return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
