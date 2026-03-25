@@ -503,3 +503,43 @@ sys_pipe(void)
   }
   return 0;
 }
+
+uint64
+sys_mutex(void) {
+  struct file *f;
+  int fd;
+
+  if(mutexalloc(&f) < 0)
+    return -1;
+
+  if((fd = fdalloc(f)) < 0){
+    fileclose(f);
+    return -1;
+  }
+
+  return fd;
+}
+
+uint64
+sys_mutex_lock(void) {
+  struct file *f;
+
+  if(argfd(0, 0, &f) < 0)
+    return -1;
+  if(f->type != FD_MUTEX)
+    return -1;
+
+  return mutexlock(f->mtx);
+}
+
+uint64
+sys_mutex_unlock(void) {
+  struct file *f;
+
+  if(argfd(0, 0, &f) < 0)
+    return -1;
+  if(f->type != FD_MUTEX)
+    return -1;
+
+  return mutexunlock(f->mtx);
+}
