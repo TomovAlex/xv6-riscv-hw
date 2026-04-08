@@ -484,3 +484,87 @@ ismapped(pagetable_t pagetable, uint64 va)
   }
   return 0;
 }
+
+void print_idx3(int x) {
+  if(x < 0x10)
+    printf("0x00%x" , x);
+  else if(x < 0x100)
+    printf("0x0%x", x);
+  else
+    printf("0x%x", x);
+}
+
+void print_table_rec(pagetable_t pagetable, int depth) {
+  for (int i = 0; i < 512; ++i) {
+    pte_t pte = pagetable[i];
+    if((pte & PTE_V) == 0)
+      continue;
+
+    for(int j = 0; j < depth; ++j) 
+      printf(".........");
+
+    uint64 pa = PTE2PA(pte);
+    print_idx3(i);
+    printf(" -> %p ", (void*)pa);
+
+    printf("%c", (pte & PTE_R) ? 'R' : '_');
+    printf("%c", (pte & PTE_W) ? 'W' : '_');
+    printf("%c", (pte & PTE_X) ? 'X' : '_');
+    printf("%c", (pte & PTE_U) ? 'U' : '_');
+    printf("%c", (pte & PTE_G) ? 'G' : '_');
+    printf("%c", (pte & PTE_A) ? 'A' : '_');
+    printf("%c", (pte & PTE_D) ? 'D' : '_');
+    printf("\n");
+
+    if ((pte & (PTE_R | PTE_W | PTE_X)) == 0)
+      print_table_rec((pagetable_t)pa, depth + 1);
+  }
+}
+
+void print_table(pagetable_t pagetable) {
+  printf("PAGETABLE %p\n", pagetable);
+  print_table_rec(pagetable, 0);
+}
+
+
+int clear_flags(pagetable_t pagetable, uint64 addr, int len, int mask) {
+  uint64 va, start, end;
+  pte_t *pte;
+  start = PGROUNDDOWN(addr);
+  end = PGROUNDDOWN(addr + len - 1);
+
+  for(va = start; va <= end; va += PGSIZE) {
+    pte = walk(pagetable, va, 0);
+
+    if(pte == 0)
+      continue;
+    if((*pte & PTE_V) == 0)
+      continue;
+
+    *pte &= ~mask;
+  }
+
+  sfence_vma();
+  return 0;
+}
+
+int check_flags(pagetable_t pagetable, uint64 addr, int len, int mask) {
+  uint64 va, start, end;
+  pte_t *pte;
+  start = PGROUNDDOWN(addr);
+  end = PGROUNDDOWN(addr + len - 1);
+
+  for(va = start; va <= end; va += PGSIZE) {
+    pte = walk(pagetable, va, 0);
+
+    if(pte == 0)
+      continue;
+    if((*pte & PTE_V) == 0)
+      continue;
+
+    if((*pte & mask) != 0)
+      return 1;
+  }
+
+  return 0;
+}

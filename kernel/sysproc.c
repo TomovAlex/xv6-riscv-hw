@@ -107,3 +107,60 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_pagetableprint(void)
+{
+  print_table(myproc()->pagetable);
+  return 0;
+}
+
+uint64
+sys_pgtclear_flags(void)
+{
+  uint64 addr;
+  int len, mask;
+  struct proc *p = myproc();
+
+  argaddr(0, &addr);
+  argint(1, &len);
+  argint(2, &mask);
+
+  if(mask == 0 || (mask & ~(PTE_A | PTE_D)))
+    return -1;
+  if(len < 0)
+    return -1;
+  if(len == 0)
+    return 0;
+  if(addr + len < addr)
+    return -1;
+  if(addr >= p->sz || addr + len > p->sz)
+    return -1;
+
+  return clear_flags(p->pagetable, addr, len, mask);
+}
+
+uint64
+sys_pgtcheck_flags(void)
+{
+  uint64 addr;
+  int len, mask;
+  struct proc *p = myproc();
+
+  argaddr(0, &addr);
+  argint(1, &len);
+  argint(2, &mask);
+
+  if(mask == 0 || (mask & ~(PTE_A | PTE_D)))
+    return -1;
+  if(len < 0)
+    return -1;
+  if(len == 0)
+    return 0;
+  if(addr + len < addr)
+    return -1;
+  if(addr >= p->sz || addr + len > p->sz)
+    return -1;
+
+  return check_flags(p->pagetable, addr, len, mask);
+}

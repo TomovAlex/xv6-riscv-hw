@@ -181,5 +181,8 @@ void            virtio_disk_init(void);
 void            virtio_disk_rw(struct buf *, int);
 void            virtio_disk_intr(void);
 
+void print_table(pagetable_t);
+int clear_flags(pagetable_t pagetable, uint64 addr, int len, int mask);
+int check_flags(pagetable_t pagetable, uint64 addr, int len, int mask);
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
