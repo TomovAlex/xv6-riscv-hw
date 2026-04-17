@@ -43,13 +43,32 @@ void print9(uint x) {
   }
 }
 
-int main(void) {
-  uint64 ns = rtc();
-  uint64 total_sec = ns / 1000000000ULL;
-  uint frac = ns % 1000000000ULL;
+long long div_floor(long long a, long long b) {
+  long long q = a / b;
+  long long r = a % b;
 
-  uint64 days = total_sec / 86400;
-  uint64 rem = total_sec % 86400;
+  if(r < 0)
+    q--;
+
+  return q;
+}
+
+long long mod_floor(long long a, long long b) {
+  long long r = a % b;
+
+  if(r < 0)
+    r += b;
+
+  return r;
+}
+
+int main(void) {
+  long long ns = (long long)rtc();
+  long long total_sec = div_floor(ns, 1000000000LL);
+  uint frac = (uint)mod_floor(ns, 1000000000LL);
+
+  long long days = div_floor(total_sec, 86400LL);
+  long long rem = mod_floor(total_sec, 86400LL);
 
   int hour = rem / 3600;
   rem %= 3600;
@@ -57,13 +76,18 @@ int main(void) {
   int sec = rem % 60;
 
   int year = 1970;
-  while(days >= (uint64)days_in_year(year)){
+  while(days < 0){
+    year--;
+    days += days_in_year(year);
+  }
+
+  while(days >= days_in_year(year)){
     days -= days_in_year(year);
     year++;
   }
 
   int month = 1;
-  while(days >= (uint64)days_in_month(year, month)){
+  while(days >= days_in_month(year, month)){
     days -= days_in_month(year, month);
     month++;
   }
