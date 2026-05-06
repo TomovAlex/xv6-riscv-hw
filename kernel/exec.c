@@ -6,6 +6,7 @@
 #include "proc.h"
 #include "defs.h"
 #include "elf.h"
+#include "logger.h"
 
 static int loadseg(pde_t *, uint64, struct inode *, uint, uint);
 
@@ -134,6 +135,9 @@ kexec(char *path, char **argv)
   p->trapframe->epc = elf.entry;  // initial program counter = ulib.c:start()
   p->trapframe->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
+
+  if(log_enabled(LOG_EXEC))
+    pr_msg("exec pid=%d proc=%s path=%s", p->pid, p->name, path);
 
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 

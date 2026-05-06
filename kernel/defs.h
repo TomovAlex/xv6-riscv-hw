@@ -8,6 +8,7 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+struct msgbuf;
 
 // bio.c
 void            binit(void);
@@ -180,6 +181,14 @@ void            plic_complete(int);
 void            virtio_disk_init(void);
 void            virtio_disk_rw(struct buf *, int);
 void            virtio_disk_intr(void);
+
+
+void msgbuf_init(void);
+void msgbuf_putchar(char);
+int msgbuf_copyout(uint64, int);
+void pr_msg(const char*, ...) __attribute__ ((format (printf, 1, 2)));
+int logger_set(int, int);
+int log_enabled(int);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
