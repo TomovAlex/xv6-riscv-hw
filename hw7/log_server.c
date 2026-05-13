@@ -124,6 +124,15 @@ static int become_daemon() {
         return -1;
     }
 
+    pid_t pid2 = fork();
+    if (pid2 < 0) {
+        fprintf(stderr, "Cannot fork daemon process: %s\n", strerror(errno));
+        return -1;
+    }
+
+    if (pid2 > 0)
+        _exit(0);
+
     umask(0);
 
     if (chdir("/") != 0) {
@@ -174,7 +183,7 @@ static int start_daemon_mode(int by_signal) {
     return 0;
 }
 
-static int handle_requests(int *daemon_mode) {
+static int handle_requests(int *daemon_mode, int fifo_fd, int *finish_after_eof) {
     if (daemonize_requested) {
         daemonize_requested = 0;
 
@@ -184,6 +193,7 @@ static int handle_requests(int *daemon_mode) {
             if (start_daemon_mode(1) != 0)
                 return -1;
             *daemon_mode = 1;
+            alarm(ALARM_SEC);
         }
     }
 
@@ -198,6 +208,24 @@ static int handle_requests(int *daemon_mode) {
         stats_requested = 0;
         printf("Received SIGUSR1, printing statistics\n");
         print_stats();
+    }
+
+    if (shutdown_signal == SIGTERM) {
+        printf("Received SIGTERM, stopping without reading remaining FIFO data\n");
+        return 1;
+    }
+
+    if (shutdown_signal == SIGINT) {
+        if (fifo_fd >= 0 && finish_after_eof != NULL) {
+            if (!*finish_after_eof) {
+                printf("Received SIGINT, reading current FIFO until EOF\n");
+                *finish_after_eof = 1;
+            }
+            return 0;
+        }
+
+        printf("Received SIGINT while waiting for FIFO\n");
+        return 1;
     }
 
     return 0;
@@ -241,23 +269,22 @@ static int run_server(int *daemon_mode) {
         int finish_after_eof = 0;
         int has_data = 0;
         char last_char = '\0';
+        int request_result;
 
-        if (handle_requests(daemon_mode) != 0)
+        request_result = handle_requests(daemon_mode, -1, NULL);
+        if (request_result < 0)
             return -1;
-
-        if (shutdown_signal != 0)
+        if (request_result > 0)
             break;
 
         fifo_fd = open(FIFO_PATH, O_RDONLY);
         if (fifo_fd == -1) {
             if (errno == EINTR) {
-                if (shutdown_signal != 0) {
-                    if (shutdown_signal == SIGTERM)
-                        printf("Received SIGTERM while waiting for FIFO\n");
-                    else if (shutdown_signal == SIGINT)
-                        printf("Received SIGINT while waiting for FIFO\n");
+                request_result = handle_requests(daemon_mode, -1, NULL);
+                if (request_result < 0)
+                    return -1;
+                if (request_result > 0)
                     break;
-                }
                 continue;
             }
             fprintf(stderr, "Cannot open FIFO %s: %s\n", FIFO_PATH, strerror(errno));
@@ -268,9 +295,15 @@ static int run_server(int *daemon_mode) {
 
         while (1) {
             ssize_t bytes_read;
-            if (handle_requests(daemon_mode) != 0) {
+
+            request_result = handle_requests(daemon_mode, fifo_fd, &finish_after_eof);
+            if (request_result < 0) {
                 close(fifo_fd);
                 return -1;
+            }
+            if (request_result > 0) {
+                close(fifo_fd);
+                return 0;
             }
 
             bytes_read = read(fifo_fd, buffer, BUFFER_SIZE);
@@ -281,6 +314,17 @@ static int run_server(int *daemon_mode) {
                 buffer[bytes_read] = '\0';
                 fputs(buffer, stdout);
                 fflush(stdout);
+
+                request_result = handle_requests(daemon_mode, fifo_fd, &finish_after_eof);
+                if (request_result < 0) {
+                    close(fifo_fd);
+                    return -1;
+                }
+                if (request_result > 0) {
+                    close(fifo_fd);
+                    return 0;
+                }
+
                 continue;
             }
 
@@ -293,16 +337,14 @@ static int run_server(int *daemon_mode) {
             }
 
             if (errno == EINTR) {
-                if (shutdown_signal == SIGTERM) {
-                    printf("Received SIGTERM, stopping without reading remaining FIFO data\n");
+                request_result = handle_requests(daemon_mode, fifo_fd, &finish_after_eof);
+                if (request_result < 0) {
+                    close(fifo_fd);
+                    return -1;
+                }
+                if (request_result > 0) {
                     close(fifo_fd);
                     return 0;
-                }
-
-                if (shutdown_signal == SIGINT) {
-                    printf("Received SIGINT, reading current FIFO until EOF\n");
-                    finish_after_eof = 1;
-                    continue;
                 }
                 continue;
             }
